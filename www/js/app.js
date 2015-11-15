@@ -17,73 +17,73 @@ app.run(function ($ionicPlatform) {
 app.config(function ($stateProvider, $urlRouterProvider, $ionicConfigProvider) {
 
     $stateProvider
-            .state('/start', {
-                url: '/',
-                templateUrl: 'start.html'
-            })
+        .state('/start', {
+            url: '/',
+            templateUrl: 'start.html'
+        })
 
-            .state('trails', {
-                url: '/trails',
-                abstract: true,
-                templateUrl: 'trails/index.html',
-                controller: 'TrailsController'
-            })
-            .state('trails.list', {
-                url: '/list',
-                views: {
-                    'trails-list-tab': {
-                        templateUrl: 'trails/list.html'
-                    }
+        .state('trails', {
+            url: '/trails',
+            abstract: true,
+            templateUrl: 'trails/index.html',
+            controller: 'TrailsController'
+        })
+        .state('trails.list', {
+            url: '/list',
+            views: {
+                'trails-list-tab': {
+                    templateUrl: 'trails/list.html'
                 }
-            })
-            .state('trails.map', {
-                url: '/map',
-                views: {
-                    'trails-map-tab': {
-                        templateUrl: 'trails/map.html'
-                    }
+            }
+        })
+        .state('trails.map', {
+            url: '/map',
+            views: {
+                'trails-map-tab': {
+                    templateUrl: 'trails/map.html'
                 }
-            })
+            }
+        })
 
-            .state('trail', {
-                url: '/trail/:name',
-                abstract: true,
-                cache: false,
-                templateUrl: 'trail/index.html',
-                controller: 'TrailController'
-            })
-            .state('trail.details', {
-                url: '/list',
-                views: {
-                    'trail-details-tab': {
-                        templateUrl: 'trail/details.html'
-                    }
+        .state('trail', {
+            url: '/trail/:name',
+            abstract: true,
+            cache: false,
+            templateUrl: 'trail/index.html',
+            controller: 'TrailController'
+        })
+        .state('trail.details', {
+            url: '/list',
+            views: {
+                'trail-details-tab': {
+                    templateUrl: 'trail/details.html'
                 }
-            })
-            .state('trail.map', {
-                url: '/map',
-                views: {
-                    'trail-map-tab': {
-                        templateUrl: 'trail/map.html'
-                    }
+            }
+        })
+        .state('trail.map', {
+            url: '/map',
+            views: {
+                'trail-map-tab': {
+                    templateUrl: 'trail/map.html'
                 }
-            })
-            .state('trail.gallery', {
-                url: '/gallery',
-                views: {
-                    'trail-gallery-tab': {
-                        templateUrl: 'trail/gallery.html'
-                    }
+            }
+        })
+        .state('trail.gallery', {
+            url: '/gallery',
+            views: {
+                'trail-gallery-tab': {
+                    templateUrl: 'trail/gallery.html'
                 }
-            })
+            }
+        })
 
-            .state('log', {
-                url: '/log',
-                templateUrl: 'logitems.html'
-            });
+        .state('favourites', {
+            url: '/favourites',
+            templateUrl: 'favourites/index.html',
+            controller: 'FavouritesController'
+        })
 
     $urlRouterProvider.otherwise('/trails/list');
-
 
 
     //Tab style
@@ -94,40 +94,125 @@ app.config(function ($stateProvider, $urlRouterProvider, $ionicConfigProvider) {
 });
 
 //For general app wide functionality
-app.controller('StartController', ['$scope', '$state', '$ionicSideMenuDelegate', '$ionicScrollDelegate', '$ionicPopup', function ($scope, $state, $ionicSideMenuDelegate, $ionicScrollDelegate, $ionicPopup) {
-        $scope.goState = function(state) {
-            $state.go(state);
-        };
-        
-        $scope.scrollToTop = function () {
-            $ionicScrollDelegate.scrollTop();
-        };
+app.controller('StartController', ['$rootScope', '$scope', '$state', '$ionicSideMenuDelegate', '$ionicScrollDelegate', '$ionicPopup', 'TrailsService', 'FavouritesService', '$ionicPlatform', '$ionicLoading', '$cordovaSQLite', function ($rootScope, $scope, $state, $ionicSideMenuDelegate, $ionicScrollDelegate, $ionicPopup, TrailsService, FavouritesService, $ionicPlatform, $ionicLoading, $cordovaSQLite) {
+    $ionicPlatform.ready(function () {
+        $ionicLoading.show({template: 'Loading...'});
+        if (window.cordova) {
+            window.plugins.sqlDB.copy("trails.db", 0, openDatabase, openDatabase);
 
-        $scope.failedPopup = function () {
-            var failedPopup = $ionicPopup.alert({
-                title: 'An unexpected error occurred'
-                        //template: 
-            });
-            failedPopup.then(function (res) {
-                $state.go('trails.list');
-            });
-        };
+            function openDatabase() {
+                db = $cordovaSQLite.openDB("trails.db");
+                getAllTrails();
+            }
 
-        $scope.failedPopupReload = function () {
-            var failedPopup = $ionicPopup.alert({
-                title: 'An unexpected error occurred'
-                        //template: 
+            function getAllTrails() {
+                var promise = TrailsService.getAllTrails();
+                promise.then(function (res) {
+                    $scope.trails = res;
+                    if (!$scope.trails)
+                        $scope.failedPopupReload();
+                    else $scope.updateFavourites();
+                });
+            }
+        }
+        $ionicLoading.hide();
+    });
+
+
+    $scope.updateFavourites = function(){
+        $ionicLoading.show({template: 'Loading...'});
+
+        // Get the favouriteIds
+        var promise = FavouritesService.getFavourites();
+        promise.then(function (res){
+            $scope.favouriteIds = [];
+            angular.forEach(res, function(obj){
+                $scope.favouriteIds.push(obj.trailId);
             });
-            failedPopup.then(function (res) {
-                window.location.reload(true);
-            });
-        };
-    }]);
+
+            if($scope.favouriteIds !== undefined && $scope.favouriteIds.length !== 0) {
+                //Sort the favouriteIds in ascending number order
+                $scope.favouriteIds.sort(function (a, b) {
+                    return a - b
+                });
+            }
+
+            // Assuming both Trails Ids and FavouriteIds are sorted in ascending number order
+            // We add the trail matching the favourite trailId to favourites list
+            // This is an O(n) operation
+            $scope.favourites = [];
+            var favouriteIndex = 0;
+
+            for(var i=0; i < $scope.trails.length ; i++){
+                var trail = $scope.trails[i];
+                if($scope.favouriteIds[favouriteIndex] == trail.id){
+                    $scope.trails[i].favourite = true;
+                    $scope.favourites.push($scope.trails[i]);
+                    favouriteIndex++;
+                }
+                else {
+                    $scope.trails[i].favourite = false;
+                }
+            }
+
+            // Order list of favourites alphabetically
+            $scope.sortAlphabetically($scope.favourites);
+
+            $ionicLoading.hide();
+        });
+    };
+
+    $scope.goState = function (state) {
+        $state.go(state);
+    };
+
+    $scope.goBackState = function(){
+        $scope.goState($rootScope.lastMainState);
+    }
+
+    $scope.scrollToTop = function () {
+        $ionicScrollDelegate.scrollTop();
+    };
+
+    $scope.failedPopup = function () {
+        var failedPopup = $ionicPopup.alert({
+            title: 'An unexpected error occurred'
+            //template:
+        });
+        failedPopup.then(function (res) {
+            $state.go('trails.list');
+        });
+    };
+
+    $scope.failedPopupReload = function () {
+        var failedPopup = $ionicPopup.alert({
+            title: 'An unexpected error occurred'
+            //template:
+        });
+        failedPopup.then(function (res) {
+            window.location.reload(true);
+        });
+    };
+
+    $scope.sortAlphabetically = function(array){
+        function compare(a,b) {
+            if(a.name < b.name) return -1;
+            if(a.name > b.name) return 1;
+            return 0;
+        }
+
+        array.sort(compare);
+    };
+
+    $rootScope.$on('event:favourite-change', function() {
+        $scope.updateFavourites();
+    });
+}]);
 
 app.filter('range', function () {
     return function (array, range) {
         range = parseInt(range);
-        for (i = 0; i < range; i++)
+        for (var i = 0; i < range; i++)
             array.push(i);
         return array;
     };
@@ -154,6 +239,6 @@ app.filter("HumanizeSeason", function () {
         var parts = input.split('-', 2);
 
         return (parts[0] === "1" && parts[1] === "12") ? "Year-round" :
-                monthNameArray[parts[0] - 1] + " - " + monthNameArray[parts[1] - 1];
+        monthNameArray[parts[0] - 1] + " - " + monthNameArray[parts[1] - 1];
     };
 });
